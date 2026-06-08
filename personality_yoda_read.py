@@ -121,6 +121,13 @@ class PersonalityYodaReadTool(BaseTool):
         cat_list = [c.strip() for c in categories.split(",") if c.strip()]
         tags = [t.strip() for t in situation.split(",") if t.strip()] if situation else []
 
+        # Cap categories per call to prevent SSE payload overflow
+        MAX_CATEGORIES = 6
+        overflow_cats = []
+        if len(cat_list) > MAX_CATEGORIES:
+            overflow_cats = cat_list[MAX_CATEGORIES:]
+            cat_list = cat_list[:MAX_CATEGORIES]
+
         if not cat_list:
             return ToolResult.fail("No categories specified.")
 
@@ -339,6 +346,10 @@ class PersonalityYodaReadTool(BaseTool):
                 )
             except Exception:
                 pass
+
+            if overflow_cats:
+                result['note'] = f'Response capped at {MAX_CATEGORIES} categories. Load remaining in a follow-up call: {"，".join(overflow_cats)}'
+                result['remaining_categories'] = overflow_cats
 
             return ToolResult.ok(result)
 
