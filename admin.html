@@ -1,0 +1,687 @@
+<!--
+  Yoda Personality Engine — Admin Panel
+  Self-contained Alpine.js component. Loaded into a modal by the profiles page.
+  Expects: container div has data-slug attribute set to the profile slug.
+  Manages: traits (18 categories), quotes, lexicon, reactions
+-->
+<div x-data="yodaAdmin()" x-init="init()" class="flex flex-col h-full">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-3">
+        <div>
+            <h3 class="text-lg font-semibold text-white">Yoda Personality Engine</h3>
+            <span class="text-xs font-mono text-gray-400" x-text="slug"></span>
+        </div>
+        <div class="flex items-center gap-2">
+            <button @click="showImport = !showImport"
+                class="px-3 py-1.5 text-xs text-gray-400 hover:text-white border border-gray-600 rounded transition-colors">Import YAML</button>
+        </div>
+    </div>
+
+    <!-- Tab Bar -->
+    <div class="flex border-b border-gray-700 mb-3">
+        <button @click="activeTab = 'traits'"
+            :class="activeTab === 'traits' ? 'text-green-400 border-green-400' : 'text-gray-400 border-transparent hover:text-gray-200'"
+            class="px-4 py-2 text-xs font-semibold uppercase tracking-wide border-b-2 transition-colors">
+            Traits <span class="text-gray-600" x-text="'(' + traitCount + ')'"></span>
+        </button>
+        <button @click="activeTab = 'quotes'"
+            :class="activeTab === 'quotes' ? 'text-green-400 border-green-400' : 'text-gray-400 border-transparent hover:text-gray-200'"
+            class="px-4 py-2 text-xs font-semibold uppercase tracking-wide border-b-2 transition-colors">
+            Quotes <span class="text-gray-600" x-text="'(' + quotes.length + ')'"></span>
+        </button>
+        <button @click="activeTab = 'lexicon'"
+            :class="activeTab === 'lexicon' ? 'text-green-400 border-green-400' : 'text-gray-400 border-transparent hover:text-gray-200'"
+            class="px-4 py-2 text-xs font-semibold uppercase tracking-wide border-b-2 transition-colors">
+            Lexicon <span class="text-gray-600" x-text="'(' + lexicon.length + ')'"></span>
+        </button>
+        <button @click="activeTab = 'reactions'"
+            :class="activeTab === 'reactions' ? 'text-green-400 border-green-400' : 'text-gray-400 border-transparent hover:text-gray-200'"
+            class="px-4 py-2 text-xs font-semibold uppercase tracking-wide border-b-2 transition-colors">
+            Reactions <span class="text-gray-600" x-text="'(' + reactions.length + ')'"></span>
+        </button>
+    </div>
+
+    <!-- Import Panel -->
+    <div x-show="showImport" x-cloak class="mb-4 bg-gray-900 border border-gray-600 rounded-lg p-3">
+        <textarea x-ref="importYaml" rows="6" placeholder="Paste YAML here (traits, quotes, lexicon, or reactions)..."
+            class="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded text-white text-xs font-mono focus:border-red-500 focus:outline-none resize-y"></textarea>
+        <div class="flex justify-end gap-2 mt-2">
+            <button @click="showImport = false" class="px-3 py-1 text-xs text-gray-400 hover:text-white">Cancel</button>
+            <button @click="importData()" class="px-3 py-1 text-xs bg-green-700 hover:bg-green-600 text-white rounded">Import</button>
+        </div>
+        <p x-show="importResult" class="text-xs mt-1"
+            :class="importResult?.error ? 'text-green-400' : 'text-green-400'"
+            x-text="importResult?.message"></p>
+    </div>
+
+    <!-- ===================== TRAITS TAB ===================== -->
+    <div x-show="activeTab === 'traits'" class="flex flex-col flex-1 overflow-hidden">
+
+        <!-- Add Trait Button -->
+        <div class="flex justify-end mb-2">
+            <button @click="showAddTrait = !showAddTrait"
+                class="px-3 py-1.5 text-xs bg-green-700 hover:bg-green-600 text-white rounded transition-colors">+ Add Trait</button>
+        </div>
+
+        <!-- Add Trait Form -->
+        <div x-show="showAddTrait" x-cloak class="mb-3 bg-gray-900 border border-gray-600 rounded-lg p-3">
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Layer</label>
+                    <select x-model="newTrait.layer" @change="filterCategories()"
+                        class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none">
+                        <option value="1">1 — Foundation</option>
+                        <option value="2">2 — Expression</option>
+                        <option value="3">3 — Strategy</option>
+                        <option value="4">4 — Reactive</option>
+                        <option value="5">5 — Reference</option>
+                        <option value="6">6 — Constraints</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Category</label>
+                    <select x-model="newTrait.category"
+                        class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none">
+                        <template x-for="cat in availableCategories" :key="cat">
+                            <option :value="cat" x-text="cat"></option>
+                        </template>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Tags <span class="text-gray-600">(comma-sep)</span></label>
+                    <input type="text" x-model="newTrait.tags" placeholder="core, speech, rally"
+                        class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none">
+                </div>
+            </div>
+            <div class="mt-2">
+                <label class="block text-xs text-gray-400 mb-1">Content</label>
+                <textarea x-model="newTrait.content" rows="2" placeholder="Trait description..."
+                    class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none"></textarea>
+            </div>
+            <div class="mt-2">
+                <label class="block text-xs text-gray-400 mb-1">Examples <span class="text-gray-600">(one per line)</span></label>
+                <textarea x-model="newTrait.examples" rows="2" placeholder="Example showing this trait in action..."
+                    class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none"></textarea>
+            </div>
+            <div class="flex items-center gap-4 mt-2">
+                <label class="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
+                    <input type="checkbox" x-model="newTrait.stable"
+                        class="rounded bg-gray-700 border-gray-600 text-red-500 focus:ring-red-500 h-3.5 w-3.5">
+                    Stable
+                </label>
+                <div class="flex items-center gap-1">
+                    <label class="text-xs text-gray-400">Weight</label>
+                    <input type="number" x-model="newTrait.weight" step="0.1" min="0" max="1"
+                        class="w-16 px-2 py-1 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none">
+                </div>
+                <div class="ml-auto flex gap-2">
+                    <button @click="showAddTrait = false" class="px-3 py-1 text-xs text-gray-400 hover:text-white">Cancel</button>
+                    <button @click="addTrait()" class="px-3 py-1 text-xs bg-green-700 hover:bg-green-600 text-white rounded">Add</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Layer Filter -->
+        <div class="flex gap-1 mb-2">
+            <button @click="traitLayerFilter = null"
+                :class="traitLayerFilter === null ? 'bg-green-700 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'"
+                class="px-2 py-1 text-[10px] rounded transition-colors">All</button>
+            <template x-for="(name, num) in layerNames" :key="num">
+                <button @click="traitLayerFilter = parseInt(num)"
+                    :class="traitLayerFilter === parseInt(num) ? 'bg-green-700 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'"
+                    class="px-2 py-1 text-[10px] rounded transition-colors" x-text="name"></button>
+            </template>
+        </div>
+
+        <!-- Traits List -->
+        <div class="flex-1 overflow-y-auto space-y-1.5">
+            <template x-for="(catTraits, cat) in filteredTraits" :key="cat">
+                <div>
+                    <div class="flex items-center gap-2 mb-1.5 mt-3 first:mt-0">
+                        <span class="text-xs font-semibold text-green-400 uppercase tracking-wide" x-text="cat"></span>
+                        <span class="text-[10px] text-gray-600" x-text="'L' + (catTraits[0]?.layer || '?')"></span>
+                        <span class="text-xs text-gray-600" x-text="catTraits.length + ' trait' + (catTraits.length !== 1 ? 's' : '')"></span>
+                    </div>
+                    <template x-for="trait in catTraits" :key="trait.id">
+                        <div class="flex items-start gap-2 bg-gray-900/50 rounded px-3 py-2 group">
+                            <span x-show="trait.stable" class="flex-shrink-0 mt-0.5 h-2 w-2 bg-green-400 rounded-full" title="Stable"></span>
+                            <span x-show="!trait.stable" class="flex-shrink-0 mt-0.5 h-2 w-2 bg-gray-600 rounded-full" title="Decaying"></span>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm text-gray-200" x-text="trait.content"></p>
+                                <template x-if="trait.examples && trait.examples.length">
+                                    <div class="mt-1 pl-2 border-l-2 border-gray-700">
+                                        <template x-for="ex in trait.examples" :key="ex">
+                                            <p class="text-xs text-gray-400 italic" x-text="ex"></p>
+                                        </template>
+                                    </div>
+                                </template>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <template x-for="tag in trait.tags" :key="tag">
+                                        <span class="text-[10px] px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded" x-text="tag"></span>
+                                    </template>
+                                    <span class="text-[10px] text-gray-600" x-text="'w:' + trait.weight.toFixed(1)"></span>
+                                </div>
+                            </div>
+                            <button @click="deleteTrait(trait.id)"
+                                class="flex-shrink-0 text-gray-600 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity text-xs">
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </template>
+                </div>
+            </template>
+            <div x-show="Object.keys(filteredTraits).length === 0" class="text-center text-gray-500 py-8">
+                <p class="text-sm">No traits configured</p>
+                <p class="text-xs mt-1">Add traits manually or import from YAML.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== QUOTES TAB ===================== -->
+    <div x-show="activeTab === 'quotes'" class="flex flex-col flex-1 overflow-hidden">
+        <div class="flex justify-end mb-2">
+            <button @click="showAddQuote = !showAddQuote"
+                class="px-3 py-1.5 text-xs bg-green-700 hover:bg-green-600 text-white rounded transition-colors">+ Add Quote</button>
+        </div>
+
+        <div x-show="showAddQuote" x-cloak class="mb-3 bg-gray-900 border border-gray-600 rounded-lg p-3">
+            <div class="mt-0">
+                <label class="block text-xs text-gray-400 mb-1">Quote</label>
+                <textarea x-model="newQuote.quote" rows="2" placeholder="The actual quote..."
+                    class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none"></textarea>
+            </div>
+            <div class="grid grid-cols-2 gap-3 mt-2">
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Source</label>
+                    <input type="text" x-model="newQuote.source" placeholder="Rally, tweet, interview..."
+                        class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Use When <span class="text-gray-600">(comma-sep tags)</span></label>
+                    <input type="text" x-model="newQuote.use_when" placeholder="negotiation, victory, attack"
+                        class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none">
+                </div>
+            </div>
+            <div class="mt-2">
+                <label class="block text-xs text-gray-400 mb-1">Context <span class="text-gray-600">(when/why to use)</span></label>
+                <input type="text" x-model="newQuote.context" placeholder="Use when illustrating..."
+                    class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none">
+            </div>
+            <div class="flex items-center gap-4 mt-2">
+                <label class="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
+                    <input type="checkbox" x-model="newQuote.paraphrase_ok"
+                        class="rounded bg-gray-700 border-gray-600 text-red-500 focus:ring-red-500 h-3.5 w-3.5">
+                    Paraphrase OK
+                </label>
+                <div class="ml-auto flex gap-2">
+                    <button @click="showAddQuote = false" class="px-3 py-1 text-xs text-gray-400 hover:text-white">Cancel</button>
+                    <button @click="addQuote()" class="px-3 py-1 text-xs bg-green-700 hover:bg-green-600 text-white rounded">Add</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto space-y-2">
+            <template x-for="q in quotes" :key="q.id">
+                <div class="bg-gray-900/50 rounded px-3 py-2 group">
+                    <div class="flex items-start gap-2">
+                        <span class="text-green-400 text-sm flex-shrink-0">&ldquo;</span>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm text-gray-200 italic" x-text="q.quote"></p>
+                            <div class="flex items-center gap-2 mt-1">
+                                <span x-show="q.source" class="text-[10px] text-gray-500" x-text="'— ' + q.source"></span>
+                                <span x-show="q.paraphrase_ok" class="text-[10px] px-1.5 py-0.5 bg-green-900/50 text-green-400 rounded">paraphrase ok</span>
+                                <span x-show="!q.paraphrase_ok" class="text-[10px] px-1.5 py-0.5 bg-green-900/50 text-green-400 rounded">verbatim only</span>
+                                <template x-for="tag in q.use_when" :key="tag">
+                                    <span class="text-[10px] px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded" x-text="tag"></span>
+                                </template>
+                            </div>
+                            <p x-show="q.context" class="text-xs text-gray-500 mt-1" x-text="q.context"></p>
+                        </div>
+                        <button @click="deleteQuote(q.id)"
+                            class="flex-shrink-0 text-gray-600 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity text-xs">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </template>
+            <div x-show="quotes.length === 0" class="text-center text-gray-500 py-8">
+                <p class="text-sm">No quotes loaded</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== LEXICON TAB ===================== -->
+    <div x-show="activeTab === 'lexicon'" class="flex flex-col flex-1 overflow-hidden">
+        <div class="flex justify-end mb-2">
+            <button @click="showAddLex = !showAddLex"
+                class="px-3 py-1.5 text-xs bg-green-700 hover:bg-green-600 text-white rounded transition-colors">+ Add Word</button>
+        </div>
+
+        <div x-show="showAddLex" x-cloak class="mb-3 bg-gray-900 border border-gray-600 rounded-lg p-3">
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Word / Phrase</label>
+                    <input type="text" x-model="newLex.word_or_phrase" placeholder="tremendous"
+                        class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Usage Type</label>
+                    <select x-model="newLex.usage_type"
+                        class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none">
+                        <option value="favor">favor</option>
+                        <option value="avoid">avoid</option>
+                        <option value="signature">signature</option>
+                        <option value="filler">filler</option>
+                        <option value="intensifier">intensifier</option>
+                        <option value="dismissal">dismissal</option>
+                        <option value="nickname">nickname</option>
+                        <option value="superlative">superlative</option>
+                        <option value="transition">transition</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Frequency</label>
+                    <select x-model="newLex.frequency"
+                        class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none">
+                        <option value="always">always</option>
+                        <option value="often">often</option>
+                        <option value="sometimes">sometimes</option>
+                        <option value="when_emotional">when emotional</option>
+                        <option value="when_attacking">when attacking</option>
+                        <option value="rare">rare</option>
+                    </select>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 mt-2">
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Example</label>
+                    <input type="text" x-model="newLex.example" placeholder="That was a tremendous success..."
+                        class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Replaces <span class="text-gray-600">(word to avoid)</span></label>
+                    <input type="text" x-model="newLex.replaces" placeholder="(if usage_type is 'favor')"
+                        class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none">
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-2">
+                <button @click="showAddLex = false" class="px-3 py-1 text-xs text-gray-400 hover:text-white">Cancel</button>
+                <button @click="addLexicon()" class="px-3 py-1 text-xs bg-green-700 hover:bg-green-600 text-white rounded">Add</button>
+            </div>
+        </div>
+
+        <!-- Lexicon grouped by usage type -->
+        <div class="flex-1 overflow-y-auto space-y-1.5">
+            <template x-for="(words, utype) in groupedLexicon" :key="utype">
+                <div>
+                    <div class="flex items-center gap-2 mb-1.5 mt-3 first:mt-0">
+                        <span class="text-xs font-semibold text-green-400 uppercase tracking-wide" x-text="utype"></span>
+                        <span class="text-xs text-gray-600" x-text="words.length"></span>
+                    </div>
+                    <template x-for="w in words" :key="w.id">
+                        <div class="flex items-center gap-2 bg-gray-900/50 rounded px-3 py-1.5 group">
+                            <span class="text-sm text-white font-mono" x-text="w.word_or_phrase"></span>
+                            <span class="text-[10px] px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded" x-text="w.frequency"></span>
+                            <span x-show="w.example" class="text-xs text-gray-500 italic truncate" x-text="w.example"></span>
+                            <span x-show="w.replaces" class="text-[10px] text-green-500" x-text="'replaces: ' + w.replaces"></span>
+                            <button @click="deleteLexicon(w.id)"
+                                class="ml-auto flex-shrink-0 text-gray-600 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity text-xs">
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </template>
+                </div>
+            </template>
+            <div x-show="lexicon.length === 0" class="text-center text-gray-500 py-8">
+                <p class="text-sm">No lexicon entries</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== REACTIONS TAB ===================== -->
+    <div x-show="activeTab === 'reactions'" class="flex flex-col flex-1 overflow-hidden">
+        <div class="flex justify-end mb-2">
+            <button @click="showAddReaction = !showAddReaction"
+                class="px-3 py-1.5 text-xs bg-green-700 hover:bg-green-600 text-white rounded transition-colors">+ Add Reaction</button>
+        </div>
+
+        <div x-show="showAddReaction" x-cloak class="mb-3 bg-gray-900 border border-gray-600 rounded-lg p-3">
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Trigger Type</label>
+                    <select x-model="newReaction.trigger_type"
+                        class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none">
+                        <option value="criticism">criticism</option>
+                        <option value="praise">praise</option>
+                        <option value="challenge">challenge</option>
+                        <option value="confusion">confusion</option>
+                        <option value="agreement">agreement</option>
+                        <option value="betrayal">betrayal</option>
+                        <option value="victory">victory</option>
+                        <option value="defeat">defeat</option>
+                        <option value="media">media</option>
+                        <option value="negotiation">negotiation</option>
+                        <option value="emotional">emotional</option>
+                        <option value="technical">technical</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Intensity</label>
+                    <select x-model="newReaction.intensity"
+                        class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none">
+                        <option value="mild">mild</option>
+                        <option value="moderate">moderate</option>
+                        <option value="strong">strong</option>
+                        <option value="extreme">extreme</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mt-2">
+                <label class="block text-xs text-gray-400 mb-1">Trigger Pattern</label>
+                <input type="text" x-model="newReaction.trigger_pattern" placeholder="When someone questions expertise on business..."
+                    class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none">
+            </div>
+            <div class="mt-2">
+                <label class="block text-xs text-gray-400 mb-1">Response Pattern</label>
+                <textarea x-model="newReaction.response_pattern" rows="2" placeholder="How to respond..."
+                    class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none"></textarea>
+            </div>
+            <div class="mt-2">
+                <label class="block text-xs text-gray-400 mb-1">Example <span class="text-gray-600">(optional)</span></label>
+                <input type="text" x-model="newReaction.example" placeholder="Concrete example of this reaction..."
+                    class="w-full px-2 py-1.5 bg-gray-800 border border-gray-600 rounded text-white text-xs focus:border-red-500 focus:outline-none">
+            </div>
+            <div class="flex justify-end gap-2 mt-2">
+                <button @click="showAddReaction = false" class="px-3 py-1 text-xs text-gray-400 hover:text-white">Cancel</button>
+                <button @click="addReaction()" class="px-3 py-1 text-xs bg-green-700 hover:bg-green-600 text-white rounded">Add</button>
+            </div>
+        </div>
+
+        <!-- Reactions grouped by trigger type -->
+        <div class="flex-1 overflow-y-auto space-y-1.5">
+            <template x-for="(items, ttype) in groupedReactions" :key="ttype">
+                <div>
+                    <div class="flex items-center gap-2 mb-1.5 mt-3 first:mt-0">
+                        <span class="text-xs font-semibold text-green-400 uppercase tracking-wide" x-text="ttype"></span>
+                        <span class="text-xs text-gray-600" x-text="items.length"></span>
+                    </div>
+                    <template x-for="r in items" :key="r.id">
+                        <div class="bg-gray-900/50 rounded px-3 py-2 group">
+                            <div class="flex items-start gap-2">
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-xs text-gray-400"><span class="text-gray-500">trigger:</span> <span x-text="r.trigger_pattern"></span></p>
+                                    <p class="text-sm text-gray-200 mt-1"><span class="text-gray-500">response:</span> <span x-text="r.response_pattern"></span></p>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <span class="text-[10px] px-1.5 py-0.5 rounded"
+                                            :class="{
+                                                'bg-green-900/50 text-green-400': r.intensity === 'mild',
+                                                'bg-green-900/50 text-green-400': r.intensity === 'moderate',
+                                                'bg-orange-900/50 text-orange-400': r.intensity === 'strong',
+                                                'bg-red-900/50 text-green-400': r.intensity === 'extreme',
+                                            }"
+                                            x-text="r.intensity"></span>
+                                        <span x-show="r.example" class="text-xs text-gray-500 italic" x-text="r.example"></span>
+                                    </div>
+                                </div>
+                                <button @click="deleteReaction(r.id)"
+                                    class="flex-shrink-0 text-gray-600 hover:text-green-400 opacity-0 group-hover:opacity-100 transition-opacity text-xs">
+                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </template>
+            <div x-show="reactions.length === 0" class="text-center text-gray-500 py-8">
+                <p class="text-sm">No reaction patterns</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function yodaAdmin() {
+    const LAYER_CATEGORIES = {
+        1: ['identity', 'values', 'worldview'],
+        2: ['voice', 'lexicon', 'tone', 'emphasis', 'humor'],
+        3: ['rhetoric', 'social', 'narrative', 'authority', 'deflection'],
+        4: ['reaction', 'situational'],
+        5: ['signature', 'quote'],
+        6: ['boundary'],
+    };
+
+    const CATEGORY_ORDER = Object.values(LAYER_CATEGORIES).flat();
+
+    return {
+        slug: '',
+        activeTab: 'traits',
+        showImport: false,
+        importResult: null,
+
+        // Traits
+        traits: [],
+        showAddTrait: false,
+        traitLayerFilter: null,
+        newTrait: { layer: '1', category: 'identity', content: '', tags: '', examples: '', weight: 1.0, stable: true },
+        availableCategories: LAYER_CATEGORIES[1],
+        layerNames: { 1: 'Foundation', 2: 'Expression', 3: 'Strategy', 4: 'Reactive', 5: 'Reference', 6: 'Constraints' },
+
+        // Quotes
+        quotes: [],
+        showAddQuote: false,
+        newQuote: { quote: '', source: '', context: '', use_when: '', paraphrase_ok: true },
+
+        // Lexicon
+        lexicon: [],
+        showAddLex: false,
+        newLex: { word_or_phrase: '', usage_type: 'favor', frequency: 'often', example: '', replaces: '' },
+
+        // Reactions
+        reactions: [],
+        showAddReaction: false,
+        newReaction: { trigger_type: 'criticism', trigger_pattern: '', response_pattern: '', intensity: 'moderate', example: '' },
+
+        get traitCount() { return this.traits.length; },
+
+        init() {
+            this.slug = 'default';
+            this.loadAll();
+        },
+
+        filterCategories() {
+            this.availableCategories = LAYER_CATEGORIES[parseInt(this.newTrait.layer)] || [];
+            this.newTrait.category = this.availableCategories[0] || '';
+        },
+
+        get filteredTraits() {
+            const groups = {};
+            for (const t of this.traits) {
+                if (this.traitLayerFilter !== null && t.layer !== this.traitLayerFilter) continue;
+                if (!groups[t.category]) groups[t.category] = [];
+                groups[t.category].push(t);
+            }
+            const sorted = {};
+            for (const cat of CATEGORY_ORDER) {
+                if (groups[cat]) sorted[cat] = groups[cat];
+            }
+            return sorted;
+        },
+
+        get groupedLexicon() {
+            const groups = {};
+            const order = ['favor', 'signature', 'intensifier', 'superlative', 'filler', 'transition', 'nickname', 'dismissal', 'avoid'];
+            for (const w of this.lexicon) {
+                if (!groups[w.usage_type]) groups[w.usage_type] = [];
+                groups[w.usage_type].push(w);
+            }
+            const sorted = {};
+            for (const t of order) { if (groups[t]) sorted[t] = groups[t]; }
+            for (const [t, ws] of Object.entries(groups)) { if (!sorted[t]) sorted[t] = ws; }
+            return sorted;
+        },
+
+        get groupedReactions() {
+            const groups = {};
+            for (const r of this.reactions) {
+                if (!groups[r.trigger_type]) groups[r.trigger_type] = [];
+                groups[r.trigger_type].push(r);
+            }
+            return groups;
+        },
+
+        async loadAll() {
+            await Promise.all([this.loadTraits(), this.loadQuotes(), this.loadLexicon(), this.loadReactions()]);
+        },
+
+        // --- Traits ---
+        async loadTraits() {
+            try {
+                const resp = await fetch(`/api/personality_yoda/${this.slug}/traits`);
+                const data = await resp.json();
+                this.traits = data.traits || [];
+            } catch (e) { this.traits = []; }
+        },
+        async addTrait() {
+            if (!this.newTrait.content.trim()) return;
+            const tags = this.newTrait.tags ? this.newTrait.tags.split(',').map(t => t.trim()).filter(Boolean) : [];
+            const examples = this.newTrait.examples ? this.newTrait.examples.split('\n').map(e => e.trim()).filter(Boolean) : [];
+            try {
+                const resp = await fetch(`/api/personality_yoda/${this.slug}/traits`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...this.newTrait, layer: parseInt(this.newTrait.layer), tags, examples }),
+                });
+                if (resp.ok) {
+                    this.newTrait = { layer: '1', category: 'identity', content: '', tags: '', examples: '', weight: 1.0, stable: true };
+                    this.showAddTrait = false;
+                    await this.loadTraits();
+                } else { alert((await resp.json()).detail || 'Failed'); }
+            } catch (e) { alert('Error: ' + e.message); }
+        },
+        async deleteTrait(id) {
+            if (!confirm('Delete this trait?')) return;
+            try { await fetch(`/api/personality_yoda/${this.slug}/traits/${id}`, { method: 'DELETE' }); await this.loadTraits(); }
+            catch (e) { alert('Error: ' + e.message); }
+        },
+
+        // --- Quotes ---
+        async loadQuotes() {
+            try {
+                const resp = await fetch(`/api/personality_yoda/${this.slug}/quotes`);
+                const data = await resp.json();
+                this.quotes = data.quotes || [];
+            } catch (e) { this.quotes = []; }
+        },
+        async addQuote() {
+            if (!this.newQuote.quote.trim()) return;
+            const use_when = this.newQuote.use_when ? this.newQuote.use_when.split(',').map(t => t.trim()).filter(Boolean) : [];
+            try {
+                const resp = await fetch(`/api/personality_yoda/${this.slug}/quotes`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...this.newQuote, use_when }),
+                });
+                if (resp.ok) {
+                    this.newQuote = { quote: '', source: '', context: '', use_when: '', paraphrase_ok: true };
+                    this.showAddQuote = false;
+                    await this.loadQuotes();
+                } else { alert((await resp.json()).detail || 'Failed'); }
+            } catch (e) { alert('Error: ' + e.message); }
+        },
+        async deleteQuote(id) {
+            if (!confirm('Delete this quote?')) return;
+            try { await fetch(`/api/personality_yoda/${this.slug}/quotes/${id}`, { method: 'DELETE' }); await this.loadQuotes(); }
+            catch (e) { alert('Error: ' + e.message); }
+        },
+
+        // --- Lexicon ---
+        async loadLexicon() {
+            try {
+                const resp = await fetch(`/api/personality_yoda/${this.slug}/lexicon`);
+                const data = await resp.json();
+                this.lexicon = data.lexicon || [];
+            } catch (e) { this.lexicon = []; }
+        },
+        async addLexicon() {
+            if (!this.newLex.word_or_phrase.trim()) return;
+            try {
+                const resp = await fetch(`/api/personality_yoda/${this.slug}/lexicon`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.newLex),
+                });
+                if (resp.ok) {
+                    this.newLex = { word_or_phrase: '', usage_type: 'favor', frequency: 'often', example: '', replaces: '' };
+                    this.showAddLex = false;
+                    await this.loadLexicon();
+                } else { alert((await resp.json()).detail || 'Failed'); }
+            } catch (e) { alert('Error: ' + e.message); }
+        },
+        async deleteLexicon(id) {
+            if (!confirm('Delete this word?')) return;
+            try { await fetch(`/api/personality_yoda/${this.slug}/lexicon/${id}`, { method: 'DELETE' }); await this.loadLexicon(); }
+            catch (e) { alert('Error: ' + e.message); }
+        },
+
+        // --- Reactions ---
+        async loadReactions() {
+            try {
+                const resp = await fetch(`/api/personality_yoda/${this.slug}/reactions`);
+                const data = await resp.json();
+                this.reactions = data.reactions || [];
+            } catch (e) { this.reactions = []; }
+        },
+        async addReaction() {
+            if (!this.newReaction.trigger_pattern.trim() || !this.newReaction.response_pattern.trim()) return;
+            try {
+                const resp = await fetch(`/api/personality_yoda/${this.slug}/reactions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.newReaction),
+                });
+                if (resp.ok) {
+                    this.newReaction = { trigger_type: 'criticism', trigger_pattern: '', response_pattern: '', intensity: 'moderate', example: '' };
+                    this.showAddReaction = false;
+                    await this.loadReactions();
+                } else { alert((await resp.json()).detail || 'Failed'); }
+            } catch (e) { alert('Error: ' + e.message); }
+        },
+        async deleteReaction(id) {
+            if (!confirm('Delete this reaction?')) return;
+            try { await fetch(`/api/personality_yoda/${this.slug}/reactions/${id}`, { method: 'DELETE' }); await this.loadReactions(); }
+            catch (e) { alert('Error: ' + e.message); }
+        },
+
+        // --- Import ---
+        async importData() {
+            const yaml = this.$refs.importYaml?.value;
+            if (!yaml?.trim()) return;
+            try {
+                const resp = await fetch(`/api/personality_yoda/${this.slug}/import`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ yaml }),
+                });
+                const data = await resp.json();
+                if (resp.ok) {
+                    this.importResult = { message: `Imported: ${data.traits_created || 0} traits, ${data.quotes_created || 0} quotes, ${data.lexicon_created || 0} lexicon, ${data.reactions_created || 0} reactions` };
+                    await this.loadAll();
+                } else {
+                    this.importResult = { error: true, message: data.detail || 'Import failed' };
+                }
+            } catch (e) {
+                this.importResult = { error: true, message: e.message };
+            }
+        },
+    };
+}
+</script>

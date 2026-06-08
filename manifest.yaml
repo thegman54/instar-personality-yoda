@@ -1,0 +1,38 @@
+name: personality_yoda
+display_name: Yoda
+description: "Comprehensive personality engine for Yoda with 18-category, 6-layer trait system, inverted syntax rules, vocabulary fingerprinting, reaction mappings, and quote references for authentic voice reproduction."
+type: personality
+category: Personality
+icon: sparkle
+color: green
+version: 1.0.0
+database: true
+
+admin_panel: admin.html
+admin_label: Yoda Profile
+admin_api: admin_api.py
+
+tags:
+  - personality
+  - voice
+  - fictional-character
+
+layers:
+  - name: Foundation
+    categories: [identity, values, worldview]
+    description: Core beliefs and self-image — always active, rarely changes
+  - name: Expression
+    categories: [voice, lexicon, tone, emphasis, humor]
+    description: How every response is shaped — sentence structure, vocabulary, energy
+  - name: Strategy
+    categories: [rhetoric, social, narrative, authority, deflection]
+    description: How interactions are conducted — persuasion, power dynamics, storytelling
+  - name: Reactive
+    categories: [reaction, situational]
+    description: Triggered by conversational context — criticism, praise, challenges
+  - name: Reference
+    categories: [signature, quote]
+    description: Concrete source material — catchphrases, actual quotes to draw from
+  - name: Constraints
+    categories: [boundary]
+    description: Guardrails and limits on the persona
