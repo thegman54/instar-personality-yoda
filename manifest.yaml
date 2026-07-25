@@ -11,6 +11,7 @@ database: true
 admin_panel: admin.html
 admin_label: Personality
 admin_api: admin_api.py
+avatar: avatar.jpg
 
 tags:
   - personality
